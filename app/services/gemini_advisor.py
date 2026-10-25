@@ -137,7 +137,7 @@ class ArvaGeminiAdvisor:
                 "observation_note": "AWD desiccation within safe envelope" if depth > -15.0 else "Reflood threshold reached"
             })
 
-        # 4. Formulate Action Proposal (Strictly requires human confirmation)
+        # 4. Formulate Action Proposal and Standardized AI Decision
         action_proposal = {
             "has_proposal": has_reflood_need,
             "proposal_type": "REFLOOD_PROPOSAL" if has_reflood_need else "NONE",
@@ -145,6 +145,36 @@ class ArvaGeminiAdvisor:
             "rationale": f"Water table has reached {lowest_level:.1f} cm (AWD threshold is -15.0 cm)." if has_reflood_need else "Field is in safe drying.",
             "requires_confirmation": True,
             "deterministic_state": "REFLOOD" if has_reflood_need else "HOLD"
+        }
+
+        # Standardized AI Decision object for ArvaCore validation and execution
+        recommended_action = "IRRIGATE" if has_reflood_need else "MONITOR"
+        ag_reasoning = (
+            f"Under PhilRice AWD guidelines, safe desiccation allows water levels to recede down to -15.0 cm. "
+            f"Water table has reached {lowest_level:.1f} cm, requiring reflooding to +5.0 cm depth to maintain optimal tillering and prevent moisture stress."
+            if has_reflood_need else
+            "All monitoring zones are within safe AWD drying boundaries. Aerobic root growth and soil aeration active. Continue monitoring without pump actuation."
+        )
+
+        structured_decision = {
+            "decision_id": f"ai-dec-{uuid.uuid4().hex[:8]}",
+            "field_id": request.field_id,
+            "timestamp": now_iso,
+            "crop_stage": "VEGETATIVE_TILLERING",
+            "recommended_action": recommended_action,
+            "agricultural_reasoning": ag_reasoning,
+            "supporting_observations": observations,
+            "operating_constraints": {
+                "target_flood_depth_cm": 5.0,
+                "safe_drying_threshold_cm": -15.0,
+                "max_duration_minutes": 45,
+                "flow_verification_required": True
+            },
+            "requires_confirmation": True,
+            "is_simulated": False,
+            "expiration_timestamp": None,
+            "confidence_score": 0.96,
+            "model_version": self.model_name
         }
 
         summary = (
@@ -158,6 +188,7 @@ class ArvaGeminiAdvisor:
             "summary_text": summary,
             "node_observations": observations,
             "action_proposal": action_proposal,
+            "structured_decision": structured_decision,
             "agronomic_references": [
                 "PhilRice Philippine Rice Production Training Manual (2003): Modules 1-19",
                 "IRRI Alternate Wetting and Drying (AWD) Technical Guidelines (safe drying to -15 cm)",

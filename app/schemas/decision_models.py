@@ -42,6 +42,26 @@ class ActionProposal:
     deterministic_state: str = "HOLD"
 
 @dataclass
+class StructuredIrrigationDecision:
+    """
+    Standardized AI-Driven Irrigation Decision Schema.
+    Produced by Arva (AI) and validated/executed by ArvaCore.
+    """
+    decision_id: str
+    field_id: int
+    timestamp: str
+    crop_stage: str
+    recommended_action: str  # "NO_ACTION", "MONITOR", "IRRIGATE", "STOP_IRRIGATION", "ASSESS_REQUIRED"
+    agricultural_reasoning: str
+    supporting_observations: List[Dict[str, Any]] = field(default_factory=list)
+    operating_constraints: Dict[str, Any] = field(default_factory=dict)
+    requires_confirmation: bool = True
+    is_simulated: bool = False
+    expiration_timestamp: Optional[str] = None
+    confidence_score: float = 0.95
+    model_version: str = "gemini-2.5-flash"
+
+@dataclass
 class AIAdvisorResponse:
     query_id: str
     timestamp: str
@@ -49,6 +69,7 @@ class AIAdvisorResponse:
     node_observations: List[Dict[str, Any]]
     action_proposal: Dict[str, Any]
     agronomic_references: List[str]
+    structured_decision: Optional[Dict[str, Any]] = None
     disclaimer: str = (
         "Advisory recommendation only. Physical irrigation actuation is subject to "
         "deterministic safety interlocks and authorized farmer confirmation."

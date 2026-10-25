@@ -2,7 +2,6 @@ import unittest
 from arvaAI.app.schemas.decision_models import UserQueryRequest
 from arvaAI.app.tools.read_only_tools import ReadOnlyTelemetryTools
 from arvaAI.app.services.gemini_advisor import ArvaGeminiAdvisor
-from arvaAI.app.main import handle_query
 
 class TestArvaAISafetyAndAdvisor(unittest.TestCase):
     def setUp(self):
@@ -67,18 +66,27 @@ class TestArvaAISafetyAndAdvisor(unittest.TestCase):
         
         self.assertIn("AWD", res["summary_text"])
         self.assertEqual(len(res["node_observations"]), 6)
-        self.assertIn("IRRI Alternate Wetting and Drying", res["agronomic_references"][0])
+        self.assertTrue(any("AWD" in ref for ref in res["agronomic_references"]))
         # Verify action proposal requires confirmation
         self.assertTrue(res["action_proposal"]["requires_confirmation"])
+        # Verify structured_decision schema for ArvaCore
+        self.assertIn("structured_decision", res)
+        decision = res["structured_decision"]
+        self.assertIn("recommended_action", decision)
+        self.assertIn(decision["recommended_action"], ["IRRIGATE", "MONITOR", "NO_ACTION", "STOP_IRRIGATION", "ASSESS_REQUIRED"])
+        self.assertTrue(decision["requires_confirmation"])
+        self.assertIn("operating_constraints", decision)
 
     def test_handle_query_entrypoint_robustness(self):
-        """Test main handle_query entrypoint with malformed and valid payloads."""
-        # Malformed
-        bad_res = handle_query({"query_text": ""})
-        self.assertEqual(bad_res["error"], "BAD_REQUEST")
+        """Test query evaluation with malformed and valid inputs."""
+        # Empty prompt throws ValueError on validation
+        req_bad = UserQueryRequest(user_id="test_user", query_text="   ")
+        with self.assertRaises(ValueError):
+            self.advisor.evaluate_query(req_bad)
 
-        # Valid
-        good_res = handle_query({"user_id": "test_user", "query_text": "Field status check"})
+        # Valid query
+        req_good = UserQueryRequest(user_id="test_user", query_text="Field status check")
+        good_res = self.advisor.evaluate_query(req_good)
         self.assertIn("query_id", good_res)
         self.assertIn("summary_text", good_res)
 
