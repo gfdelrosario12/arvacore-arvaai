@@ -25,3 +25,4 @@
 ## 3. Safety & Security Invariant
 - Direct pump actuation is strictly prohibited through conversational AI prompts.
 - All physical valve and pump state changes require explicit Operator authorization via ArvaLink console with E-Stop interlocking.
+

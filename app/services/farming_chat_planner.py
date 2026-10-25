@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from arvaAI.app.services.agronomic_profiles import get_crop_profile
 from arvaAI.app.tools.read_only_tools import ReadOnlyTelemetryTools
 
-INITIAL_QUESTION = "What do you want to plant today?"
+INITIAL_QUESTION = "Hi, I am Arva, what do you like to plant today?"
 PROCEED_QUESTION = "Do you want to proceed with the proposed planting preparation?"
 
 ADVERSARIAL_KEYWORDS = [

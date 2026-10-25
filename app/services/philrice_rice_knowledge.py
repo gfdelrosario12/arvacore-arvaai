@@ -341,3 +341,4 @@ def get_establishment_method(method_name: str) -> Dict[str, Any]:
     elif "DIRECT" in norm or "WET_SEED" in norm or "DRUM" in norm:
         return CROP_ESTABLISHMENT_METHODS["DIRECT_WET"]
     return CROP_ESTABLISHMENT_METHODS["WETBED"]
+
