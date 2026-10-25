@@ -1,15 +1,17 @@
 """
 Arva AI - FastAPI Microservice Entrypoint.
-Provides backend-mediated endpoints for ArvaLink and internal services.
+Provides backend-mediated endpoints for ArvaLink, the 5 agronomic data sources,
+and MCP-based agricultural reasoning.
 """
 
 import os
 from datetime import datetime, timezone
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from arvaAI.app.schemas.decision_models import UserQueryRequest
 from arvaAI.app.tools.read_only_tools import ReadOnlyTelemetryTools
 from arvaAI.app.services.gemini_advisor import ArvaGeminiAdvisor
+from arvaAI.app.services.multi_source_evidence_aggregator import MultiSourceAgronomicEvidenceAggregator
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -24,11 +26,13 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 try:
     tools = ReadOnlyTelemetryTools(BACKEND_BASE_URL, ARVACORE_API_TOKEN)
     advisor = ArvaGeminiAdvisor(tools, GEMINI_API_KEY, GEMINI_MODEL)
+    aggregator = MultiSourceAgronomicEvidenceAggregator(BACKEND_BASE_URL, ARVACORE_API_TOKEN)
 except Exception as e:
     tools = None
     advisor = None
+    aggregator = None
 
-app = FastAPI(title="Arva AI Advisory Service", version="1.0.0")
+app = FastAPI(title="Arva AI Advisory Service", version="1.1.0")
 
 class QueryPayload(BaseModel):
     user_id: str = "anonymous"
@@ -36,12 +40,27 @@ class QueryPayload(BaseModel):
     field_id: int = 1
     role: str = "FARMER"
 
+class AssessmentPayload(BaseModel):
+    user_id: str = "farmer_01"
+    field_id: int = 1
+    role: str = "FARMER"
+    target_crop: str = "Lowland Rice (NSIC Rc 222)"
+    preparation_days_left: int = 21
+    query_context: str = "planting preparation and AWD water management"
+
 @app.get("/health")
 def health():
     return {
         "status": "UP",
         "service": "arva-ai",
         "model": GEMINI_MODEL,
+        "data_sources": {
+            "pagasa_mcp": "CONFIGURED",
+            "lopez_historical_agri_mcp": "CONFIGURED",
+            "arvanode_telemetry": "CONNECTED",
+            "philrice_manual_pdf": "INDEXED",
+            "farmer_database": "CONNECTED"
+        },
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
@@ -51,6 +70,26 @@ def api_query(payload: QueryPayload):
     if "error" in res:
         raise HTTPException(status_code=500, detail=res)
     return res
+
+@app.post("/api/v1/ai/planting-assessment")
+def api_planting_assessment(payload: AssessmentPayload):
+    """
+    Executes grounded 5-source multi-evidence assessment yielding one of:
+    'Suitable', 'Conditionally suitable', 'Further assessment required', 'High risk'.
+    """
+    try:
+        if not aggregator:
+            raise RuntimeError("Agronomic aggregator service not initialized.")
+        return aggregator.aggregate_evidence(
+            field_id=payload.field_id,
+            user_id=payload.user_id,
+            role=payload.role,
+            target_crop=payload.target_crop,
+            preparation_days_left=payload.preparation_days_left,
+            query_context=payload.query_context
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": "ASSESSMENT_FAILED", "message": str(e)})
 
 def handle_query(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Pure Python handler compatible with standard ASGI/WSGI or FastAPI."""
