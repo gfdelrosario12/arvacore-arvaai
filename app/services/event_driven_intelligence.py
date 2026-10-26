@@ -6,6 +6,7 @@ and rice growth stages to generate prioritized advisories and dynamic, context-a
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
+from app.services.soil_fallback_engine import global_soil_fallback_engine
 
 class FarmEvent:
     def __init__(
@@ -202,6 +203,14 @@ class EventDrivenArvaEngine:
                 field_id=field_id
             ))
 
+        # 7. Evaluate Soil Telemetry Fallback Condition
+        soil_fallback_res = global_soil_fallback_engine.evaluate_fallback(
+            nodes_telemetry=nodes_telemetry,
+            weather_forecast=weather_forecast,
+            crop_stage=crop_stage,
+            field_id=field_id
+        )
+
         # Deduplicate & cooldown events
         filtered_events = self._filter_cooldown_events(events, now)
 
@@ -213,7 +222,8 @@ class EventDrivenArvaEngine:
             is_pump_running=is_pump_running,
             is_estop_active=is_estop_active,
             has_upcoming_heavy_rain=has_upcoming_heavy_rain,
-            crop_stage=crop_stage
+            crop_stage=crop_stage,
+            soil_fallback=soil_fallback_res
         )
 
         dynamic_questions = self.generate_dynamic_questions(
@@ -260,7 +270,8 @@ class EventDrivenArvaEngine:
         is_pump_running: bool = False,
         is_estop_active: bool = False,
         has_upcoming_heavy_rain: bool = False,
-        crop_stage: str = "VEGETATIVE"
+        crop_stage: str = "VEGETATIVE",
+        soil_fallback: Optional[Any] = None
     ) -> Dict[str, Any]:
         """Synthesizes the single most prominent advisory card for Home & Sensors."""
         if is_estop_active:
@@ -272,6 +283,21 @@ class EventDrivenArvaEngine:
                 "urgency": "CRITICAL",
                 "requires_confirmation": True,
                 "rationale": "Hardware emergency interlock takes precedence over automated and manual watering schedules."
+            }
+
+        # Check soil fallback active condition
+        if soil_fallback and getattr(soil_fallback, "is_fallback_active", False):
+            return {
+                "headline": soil_fallback.headline,
+                "summary": soil_fallback.summary,
+                "proposal_type": "REFLOOD_PROPOSAL" if soil_fallback.decision.value == "IRRIGATION_RECOMMENDED" else "HOLD_IRRIGATION",
+                "target_zone": "Affected Paddy Terraces" if soil_fallback.decision.value == "IRRIGATION_RECOMMENDED" else None,
+                "urgency": "HIGH" if soil_fallback.decision.value in ["IRRIGATION_RECOMMENDED", "SENSOR_FAILURE_TROUBLESHOOTING"] else "MEDIUM",
+                "requires_confirmation": soil_fallback.requires_farmer_confirmation,
+                "rationale": f"Fallback Mode: {soil_fallback.rationale} (Confidence: {int(soil_fallback.confidence_level * 100)}%, Sources: {', '.join(soil_fallback.sources_used)})",
+                "is_soil_fallback": True,
+                "confidence_level": soil_fallback.confidence_level,
+                "fallback_sources": soil_fallback.sources_used
             }
 
         # Check critical soil dryness

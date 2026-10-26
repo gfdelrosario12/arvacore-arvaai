@@ -19,6 +19,11 @@ from app.services.pre_irrigation_scheduler import (
     PreIrrigationPlan,
     TaskLifecycleState
 )
+from app.services.soil_fallback_engine import (
+    global_soil_fallback_engine,
+    SoilFallbackEvaluation,
+    FallbackDecisionType
+)
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -94,6 +99,13 @@ class PostIrrigationOutcomePayload(BaseModel):
     duration_minutes: int
     success: bool
     notes: str = ""
+
+class SoilFallbackPayload(BaseModel):
+    field_id: int = 1
+    crop_stage: str = "VEGETATIVE"
+    nodes_telemetry: list = []
+    weather_forecast: Optional[dict] = None
+    historical_last_valid_moisture: Optional[float] = None
 
 @app.get("/health")
 def health():
@@ -225,6 +237,24 @@ def api_record_post_irrigation_outcome(payload: PostIrrigationOutcomePayload):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail={"error": "RECORD_OUTCOME_FAILED", "message": str(e)})
+
+@app.post("/api/v1/ai/soil-fallback")
+def api_soil_fallback(payload: SoilFallbackPayload):
+    """
+    Evaluates fallback reasoning when soil moisture telemetry is missing, stale, zero-padded, or conflicting.
+    Returns evidence-based irrigation advisory with explicit confidence, alternative sources used, and safety interlocks.
+    """
+    try:
+        res = global_soil_fallback_engine.evaluate_fallback(
+            nodes_telemetry=payload.nodes_telemetry,
+            weather_forecast=payload.weather_forecast,
+            crop_stage=payload.crop_stage,
+            historical_last_valid_moisture=payload.historical_last_valid_moisture,
+            field_id=payload.field_id
+        )
+        return res.model_dump()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": "SOIL_FALLBACK_FAILED", "message": str(e)})
 
 def handle_query(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Pure Python handler compatible with standard ASGI/WSGI or FastAPI."""
