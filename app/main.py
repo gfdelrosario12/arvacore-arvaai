@@ -13,6 +13,12 @@ from app.tools.read_only_tools import ReadOnlyTelemetryTools
 from app.services.gemini_advisor import ArvaGeminiAdvisor
 from app.services.multi_source_evidence_aggregator import MultiSourceAgronomicEvidenceAggregator
 from app.services.event_driven_intelligence import EventDrivenArvaEngine
+from app.services.langchain_memory_engine import global_memory_store, MemorySourceType
+from app.services.pre_irrigation_scheduler import (
+    global_pre_irrigation_scheduler,
+    PreIrrigationPlan,
+    TaskLifecycleState
+)
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -59,6 +65,35 @@ class FarmEventsPayload(BaseModel):
     is_pump_running: bool = False
     is_estop_active: bool = False
     crop_stage: str = "VEGETATIVE"
+
+class MemoryRecordPayload(BaseModel):
+    user_id: str
+    field_id: int = 1
+    category: str
+    content: str
+    source_type: str = "USER_REPORTED"
+    metadata: dict = {}
+    verified: bool = False
+
+class PreIrrigationPlanPayload(BaseModel):
+    user_id: str
+    field_id: int = 1
+    crop_variety: str = "NSIC Rc 222"
+    crop_stage: str = "TILLERING"
+    nodes_telemetry: list = []
+    weather_forecast: Optional[dict] = None
+
+class PostIrrigationOutcomePayload(BaseModel):
+    plan_id: str
+    user_id: str
+    field_id: int = 1
+    irrigation_command_id: str
+    controller_status: str
+    water_level_delta_cm: float
+    soil_moisture_delta_pct: float
+    duration_minutes: int
+    success: bool
+    notes: str = ""
 
 @app.get("/health")
 def health():
@@ -123,6 +158,73 @@ def api_event_intelligence(payload: FarmEventsPayload):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail={"error": "EVENT_INTELLIGENCE_FAILED", "message": str(e)})
+
+@app.post("/api/v1/ai/memory/record")
+def api_record_memory(payload: MemoryRecordPayload):
+    """
+    Stores persistent memory layer record (conversation, farm/field context, or operational action).
+    """
+    try:
+        source_type = MemorySourceType(payload.source_type)
+    except ValueError:
+        source_type = MemorySourceType.USER_REPORTED
+
+    rec = global_memory_store.record_farm_memory(
+        user_id=payload.user_id,
+        field_id=payload.field_id,
+        category=payload.category,
+        content=payload.content,
+        source_type=source_type,
+        metadata=payload.metadata,
+        verified=payload.verified
+    )
+    return {"status": "SUCCESS", "record": rec.model_dump()}
+
+@app.get("/api/v1/ai/memory")
+def api_get_memory(user_id: str, field_id: int = 1):
+    """
+    Retrieves active persistent memory partitioned by memory layer.
+    """
+    return global_memory_store.get_relevant_memories(user_id=user_id, field_id=field_id)
+
+@app.post("/api/v1/ai/pre-irrigation/plan")
+def api_generate_pre_irrigation_plan(payload: PreIrrigationPlanPayload):
+    """
+    Generates intelligent pre-irrigation preparation plan evaluating telemetry, weather, and memory.
+    """
+    try:
+        plan = global_pre_irrigation_scheduler.generate_preparation_plan(
+            field_id=payload.field_id,
+            user_id=payload.user_id,
+            crop_variety=payload.crop_variety,
+            crop_stage=payload.crop_stage,
+            nodes_telemetry=payload.nodes_telemetry,
+            weather_forecast=payload.weather_forecast
+        )
+        return plan.model_dump()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": "PREP_PLAN_FAILED", "message": str(e)})
+
+@app.post("/api/v1/ai/pre-irrigation/outcome")
+def api_record_post_irrigation_outcome(payload: PostIrrigationOutcomePayload):
+    """
+    Records post-irrigation outcome and associates with pre-irrigation plan in persistent memory.
+    """
+    try:
+        return global_pre_irrigation_scheduler.record_post_irrigation_outcome(
+            plan_id=payload.plan_id,
+            user_id=payload.user_id,
+            field_id=payload.field_id,
+            irrigation_command_id=payload.irrigation_command_id,
+            controller_status=payload.controller_status,
+            water_level_delta_cm=payload.water_level_delta_cm,
+            soil_moisture_delta_pct=payload.soil_moisture_delta_pct,
+            duration_minutes=payload.duration_minutes,
+            success=payload.success,
+            notes=payload.notes
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": "RECORD_OUTCOME_FAILED", "message": str(e)})
 
 def handle_query(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Pure Python handler compatible with standard ASGI/WSGI or FastAPI."""
