@@ -12,6 +12,7 @@ from app.schemas.decision_models import UserQueryRequest
 from app.tools.read_only_tools import ReadOnlyTelemetryTools
 from app.services.gemini_advisor import ArvaGeminiAdvisor
 from app.services.multi_source_evidence_aggregator import MultiSourceAgronomicEvidenceAggregator
+from app.services.event_driven_intelligence import EventDrivenArvaEngine
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -27,12 +28,14 @@ try:
     tools = ReadOnlyTelemetryTools(BACKEND_BASE_URL, ARVACORE_API_TOKEN)
     advisor = ArvaGeminiAdvisor(tools, GEMINI_API_KEY, GEMINI_MODEL)
     aggregator = MultiSourceAgronomicEvidenceAggregator(BACKEND_BASE_URL, ARVACORE_API_TOKEN)
+    event_engine = EventDrivenArvaEngine()
 except Exception as e:
     tools = None
     advisor = None
     aggregator = None
+    event_engine = EventDrivenArvaEngine()
 
-app = FastAPI(title="Arva AI Advisory Service", version="1.1.0")
+app = FastAPI(title="Arva AI Advisory Service", version="1.2.0")
 
 class QueryPayload(BaseModel):
     user_id: str = "anonymous"
@@ -47,6 +50,15 @@ class AssessmentPayload(BaseModel):
     target_crop: str = "Lowland Rice (NSIC Rc 222)"
     preparation_days_left: int = 21
     query_context: str = "planting preparation and AWD water management"
+
+class FarmEventsPayload(BaseModel):
+    field_id: int = 1
+    nodes_telemetry: list = []
+    zones: list = []
+    weather_forecast: Optional[dict] = None
+    is_pump_running: bool = False
+    is_estop_active: bool = False
+    crop_stage: str = "VEGETATIVE"
 
 @app.get("/health")
 def health():
@@ -90,6 +102,27 @@ def api_planting_assessment(payload: AssessmentPayload):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail={"error": "ASSESSMENT_FAILED", "message": str(e)})
+
+@app.post("/api/v1/ai/event-intelligence")
+def api_event_intelligence(payload: FarmEventsPayload):
+    """
+    Analyzes live farm telemetry, weather, and operational state to return:
+    - active_events: validated deduplicated farm events
+    - primary_advisory: headline, summary, AWD proposal, and urgency for mobile app
+    - dynamic_questions: context-aware questions reflecting current conditions
+    """
+    try:
+        return event_engine.analyze_farm_state(
+            nodes_telemetry=payload.nodes_telemetry,
+            zones=payload.zones,
+            weather_forecast=payload.weather_forecast,
+            is_pump_running=payload.is_pump_running,
+            is_estop_active=payload.is_estop_active,
+            crop_stage=payload.crop_stage,
+            field_id=payload.field_id
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": "EVENT_INTELLIGENCE_FAILED", "message": str(e)})
 
 def handle_query(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Pure Python handler compatible with standard ASGI/WSGI or FastAPI."""
