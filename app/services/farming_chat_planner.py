@@ -52,6 +52,20 @@ DEFAULT_REFERENCES = [
     "ArvaNet Farm & Field Topology Database"
 ]
 
+NON_RICE_CROPS = [
+    "corn", "maize", "mais",
+    "eggplant", "talong",
+    "tomato", "kamatis",
+    "onion", "sibuyas",
+    "cabbage", "repolyo",
+    "sugarcane", "tubo",
+    "cassava", "kamoteng kahoy",
+    "banana", "saging",
+    "mango", "mangga",
+    "coffee", "kape",
+    "vegetable", "vegetables", "gulay"
+]
+
 class FarmingChatPlanner:
     def __init__(self, tools: Optional[ReadOnlyTelemetryTools] = None):
         self.tools = tools
@@ -104,7 +118,33 @@ class FarmingChatPlanner:
                 "warnings": ["Consequential / destructive operational intent intercepted. Execution refused in chat."]
             }
 
-        # 3. Reset Handling
+        # 3. Non-Rice Crop Request Intercept
+        # If user explicitly asks about planting a non-rice crop, politely inform them of Arva's rice focus.
+        if any(re.search(rf"\b{re.escape(crop)}\b", lower_msg) for crop in NON_RICE_CROPS) and not any(r in lower_msg for r in ["rice", "palay", "nsic", "tubigan", "psb"]):
+            return {
+                "step": "CROP_SELECTION",
+                "selected_crop": "Lowland Rice (NSIC Rc 222)",
+                "reply": (
+                    "Arva AI is currently designed specifically for Philippine rice cultivation under the PhilRice "
+                    "PalayCheck System and IRRI Alternate Wetting and Drying (AWD) protocol. I do not provide full "
+                    "cultivation workflows for other crops at this time.\n\n"
+                    "Would you like to plan a rice crop instead? Popular varieties include Lowland Rice (NSIC Rc 222, "
+                    "NSIC Rc 160, PSB Rc 82, and NSIC Rc 216)."
+                ),
+                "prompt_question": "Which Philippine rice variety would you like to cultivate?",
+                "readiness_score": 0,
+                "readiness_status": "ASSESSING",
+                "tasks": [],
+                "requires_confirmation": False,
+                "references": [
+                    "PhilRice Philippine Rice Production Training Manual (2003)",
+                    "PhilRice PalayCheck System for Irrigated Lowland Rice",
+                    "DA-PhilRice Rice Varietal Guide (2023)"
+                ],
+                "warnings": ["Requested crop is outside the specialized rice cultivation scope of Arva AI."]
+            }
+
+        # 4. Reset Handling
         if lower_msg in ["reset", "start over", "new plan", "clear"]:
             return {
                 "step": "CROP_SELECTION",
@@ -404,8 +444,8 @@ class FarmingChatPlanner:
         low = user_msg.lower().strip()
         if len(low) < 3:
             return False
-        known_terms = ["rice", "palay", "corn", "mais", "eggplant", "talong", "tomato", "kamatis", "onion", "sibuyas", "nsic", "tubigan"]
-        return any(t in low for t in known_terms)
+        known_rice_terms = ["rice", "palay", "nsic", "tubigan", "psb", "lowland", "upland", "inbred", "hybrid"]
+        return any(t in low for t in known_rice_terms)
 
     def _build_topical_response(
         self,

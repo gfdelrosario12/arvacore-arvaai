@@ -188,11 +188,6 @@ CROP_PROFILES: Dict[str, Dict[str, Any]] = {
 
 def get_crop_profile(crop_input: str) -> Dict[str, Any]:
     query = (crop_input or "").lower()
-    if any(k in query for k in ["rice", "palay", "nsic", "tubigan"]):
-        return CROP_PROFILES["rice"]
-    elif any(k in query for k in ["corn", "maize", "mais"]):
-        return CROP_PROFILES["corn"]
-    elif any(k in query for k in ["eggplant", "talong"]):
-        return CROP_PROFILES["eggplant"]
+    # Arva AI is strictly scoped to Rice cultivation (PhilRice PalayCheck System).
     return CROP_PROFILES["rice"]
 
