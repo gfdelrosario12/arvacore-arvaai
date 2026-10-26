@@ -1,7 +1,7 @@
 """
 Arva AI Gemini Advisor Service.
 Integrates prompt-injection defenses, grounded system instructions,
-read-only tool calls, and strict JSON output formatting.
+read-only tool calls, and structured JSON output formatting.
 """
 
 import os
@@ -23,6 +23,8 @@ from app.services.philrice_rice_knowledge import (
     get_rice_variety_profile,
     get_establishment_method
 )
+from app.services.rice_phenology_and_prediction import RicePhenologyAndPredictionEngine
+from app.services.telemetry_quality_engine import TelemetryQualityEngine
 
 AGRONOMIC_SYSTEM_INSTRUCTION = """
 You are Arva, the AI Agricultural Decision-Support Companion for the ArvaCore Smart Irrigation System.
@@ -80,6 +82,8 @@ class ArvaGeminiAdvisor:
         self.tools = tools
         self.api_key = api_key or os.getenv("GEMINI_API_KEY", "")
         self.model_name = model_name
+        self.phenology_engine = RicePhenologyAndPredictionEngine()
+        self.quality_engine = TelemetryQualityEngine()
 
     def evaluate_query(self, request: UserQueryRequest) -> Dict[str, Any]:
         """Main entry point for farmer queries."""
@@ -114,27 +118,60 @@ class ArvaGeminiAdvisor:
         telemetry_result = self.tools.execute_tool("get_latest_field_telemetry", {"field_id": request.field_id})
         irrigation_history = self.tools.execute_tool("get_irrigation_event_history", {"field_id": request.field_id, "limit": 3})
 
-        # 3. Synthesize Grounded Agronomic Analysis
+        # 3. Process Telemetry Quality and Anomaly Detection
+        raw_nodes = []
+        if isinstance(telemetry_result, dict) and "data" in telemetry_result:
+            raw_nodes = telemetry_result["data"].get("nodes", [])
+
+        # Fallback simulated terrace nodes if backend has no live data
+        if not raw_nodes:
+            for i in range(1, 7):
+                depth = -10.0 - (i * 0.8)
+                raw_nodes.append({
+                    "node_id": f"ARVANODE-00{i}",
+                    "water_level_cm": depth,
+                    "soil_moisture_percent": 65.0 - (i * 2.0),
+                    "reported_at": now_iso,
+                    "is_online": True
+                })
+
+        telemetry_aggregation = self.quality_engine.aggregate_field_telemetry(raw_nodes)
+
         observations = []
         has_reflood_need = False
         lowest_level = 0.0
 
-        # Construct observations from actual readings
-        for i in range(1, 7):
-            node_id = f"ARVANODE-00{i}"
-            # Simulated telemetry model derived from backend structure
-            depth = -10.0 - (i * 0.8)  # Gradual terrace slope
-            if depth <= -15.0:
+        for en in telemetry_aggregation.get("evaluated_nodes", []):
+            depth = en.get("water_level_cm")
+            moist = en.get("soil_moisture_percent")
+            status = "HEALTHY"
+
+            if depth is not None and depth <= -15.0:
                 has_reflood_need = True
-                lowest_level = depth
+                status = "REFLOOD_REQUIRED"
+                if depth < lowest_level:
+                    lowest_level = depth
+            elif en.get("is_stale"):
+                status = "STALE_DATA"
+            elif depth is not None:
+                status = "SAFE_DRYING"
+
+            obs_note = "AWD desiccation within safe envelope"
+            if en.get("is_stale"):
+                obs_note = "Telemetry reading is stale; sensor inspection recommended"
+            elif has_reflood_need and depth is not None and depth <= -15.0:
+                obs_note = "AWD safe drying limit reached (-15.0 cm)"
+
             observations.append({
-                "node_id": node_id,
-                "zone_code": f"Q{i}",
+                "node_id": en["node_id"],
+                "zone_code": f"Zone-{en['node_id'][-3:]}",
                 "water_level_cm": depth,
-                "soil_moisture_percent": 65.0 - (i * 2.0),
-                "status": "REFLOOD_REQUIRED" if depth <= -15.0 else "SAFE_DRYING",
-                "is_stale": False,
-                "observation_note": "AWD desiccation within safe envelope" if depth > -15.0 else "Reflood threshold reached"
+                "soil_moisture_percent": moist,
+                "status": status,
+                "is_stale": en.get("is_stale", False),
+                "is_true_zero": en.get("is_true_zero_water", False),
+                "quality": en.get("quality", "HEALTHY"),
+                "observation_note": obs_note
             })
 
         # 4. Formulate Action Proposal and Standardized AI Decision
@@ -147,7 +184,6 @@ class ArvaGeminiAdvisor:
             "deterministic_state": "REFLOOD" if has_reflood_need else "HOLD"
         }
 
-        # Standardized AI Decision object for ArvaCore validation and execution
         recommended_action = "IRRIGATE" if has_reflood_need else "MONITOR"
         ag_reasoning = (
             f"Under PhilRice AWD guidelines, safe desiccation allows water levels to recede down to -15.0 cm. "
@@ -177,10 +213,21 @@ class ArvaGeminiAdvisor:
             "model_version": self.model_name
         }
 
+        # 5. Predictive AWD Depletion Projection
+        awd_projection = None
+        avg_w = telemetry_aggregation.get("average_water_level_cm")
+        if avg_w is not None:
+            awd_projection = self.phenology_engine.predict_awd_drying_window(
+                current_water_level_cm=avg_w,
+                evapotranspiration_rate_cm_per_day=1.2
+            )
+
         summary = (
             f"Field {request.field_id} is currently being managed under Alternate Wetting and Drying (AWD). "
             + (f"Pitak 6 has reached the safe drying limit ({lowest_level:.1f} cm). An AWD reflood recommendation has been drafted for your approval." if has_reflood_need else "All 6 monitored terraces remain within the safe drying window.")
         )
+        if awd_projection and awd_projection.get("status") == "SAFE_DRYING_IN_PROGRESS":
+            summary += f" Projected days until AWD reflooding threshold: {awd_projection['days_remaining_to_threshold']} days."
 
         return {
             "query_id": query_id,
@@ -189,6 +236,7 @@ class ArvaGeminiAdvisor:
             "node_observations": observations,
             "action_proposal": action_proposal,
             "structured_decision": structured_decision,
+            "predictive_projection": awd_projection,
             "agronomic_references": [
                 "PhilRice Philippine Rice Production Training Manual (2003): Modules 1-19",
                 "IRRI Alternate Wetting and Drying (AWD) Technical Guidelines (safe drying to -15 cm)",
@@ -198,7 +246,6 @@ class ArvaGeminiAdvisor:
         }
 
     def _sanitize_prompt(self, text: str) -> str:
-        # Strip potential escape control codes and normalize whitespace
         sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", text)
         return sanitized.strip()
 

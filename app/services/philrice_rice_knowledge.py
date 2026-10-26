@@ -1,7 +1,7 @@
 """
 PhilRice Rice Production Knowledge Base & Full Cultivation Cycle Support.
 Authoritative source: Philippine Rice Research Institute (PhilRice),
-"Philippine Rice Production Training Manual" (2003).
+"Philippine Rice Production Training Manual" (2003) & PalayCheck System.
 
 Covers the 12 complete workflow stages:
 1. Farm and Rice Variety Profiling (Module 4)
@@ -341,4 +341,3 @@ def get_establishment_method(method_name: str) -> Dict[str, Any]:
     elif "DIRECT" in norm or "WET_SEED" in norm or "DRUM" in norm:
         return CROP_ESTABLISHMENT_METHODS["DIRECT_WET"]
     return CROP_ESTABLISHMENT_METHODS["WETBED"]
-

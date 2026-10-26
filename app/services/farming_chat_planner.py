@@ -11,7 +11,15 @@ import re
 from datetime import datetime, timezone
 
 from app.services.agronomic_profiles import get_crop_profile
+from app.services.philrice_rice_knowledge import (
+    RICE_VARIETIES,
+    CROP_ESTABLISHMENT_METHODS,
+    get_rice_variety_profile,
+    get_establishment_method
+)
 from app.services.philrice_manual_retriever import PhilRiceManualRetriever
+from app.services.rice_phenology_and_prediction import RicePhenologyAndPredictionEngine
+from app.services.telemetry_quality_engine import TelemetryQualityEngine
 from app.tools.read_only_tools import ReadOnlyTelemetryTools
 
 INITIAL_QUESTION = "Hi, I am Arva, what do you like to plant today?"
@@ -70,6 +78,8 @@ class FarmingChatPlanner:
     def __init__(self, tools: Optional[ReadOnlyTelemetryTools] = None):
         self.tools = tools
         self._manual_retriever = PhilRiceManualRetriever()
+        self._phenology_engine = RicePhenologyAndPredictionEngine()
+        self._quality_engine = TelemetryQualityEngine()
 
     def process_turn(
         self,
@@ -159,7 +169,7 @@ class FarmingChatPlanner:
                 "warnings": []
             }
 
-        # 3. Confirmation Pending Affirmative / Negative Handling Takes Precedence
+        # 5. Confirmation Pending Affirmative / Negative Handling Takes Precedence
         if current_step == "CONFIRMATION_PENDING" and (self._is_affirmative(msg) or self._is_negative(msg)):
             crop_prof = get_crop_profile(selected_crop or "rice")
             if self._is_affirmative(msg):
@@ -177,7 +187,6 @@ class FarmingChatPlanner:
                         "warnings": ["Safety Interlock Active: Clear physical E-Stop button before proceeding."]
                     }
                 tasks = self._build_categorized_tasks(crop_prof, False)
-                # Mark system automated task as in-progress
                 for t in tasks:
                     if t["category"] == "SYSTEM_AUTOMATED":
                         t["status"] = "IN_PROGRESS"
@@ -212,9 +221,7 @@ class FarmingChatPlanner:
                     "warnings": []
                 }
 
-        # 4. Context-Aware Topical Query Intercept
-        # If the user asks about weather, fertilizer, irrigation, pests, land prep, varieties, or harvest,
-        # answer grounded in PhilRice / Lopez / PAGASA data while retaining active crop and conversation step!
+        # 6. Context-Aware Topical Query Intercept
         active_crop_name = selected_crop or "Lowland Rice (NSIC Rc 222)"
         detected_topic = self._detect_topic(lower_msg)
 
@@ -228,7 +235,7 @@ class FarmingChatPlanner:
             )
             return topical_response
 
-        # 5. Check if user is asking "What should I plant?" or general crop suitability
+        # 7. Check if user is asking "What should I plant?" or general crop suitability
         if any(k in lower_msg for k in ["what to plant", "what should i plant", "recommend crop", "crop suggestion", "recomenda", "ano ang itatanim", "ano magandang itanim"]):
             crop_prof = get_crop_profile("rice")
             reply = (
@@ -255,13 +262,11 @@ class FarmingChatPlanner:
                 "warnings": []
             }
 
-        # 6. Conversational 10-step State Progression
+        # 8. Conversational State Progression
         if current_step == "CROP_SELECTION":
-            # Check if input is a valid crop selection
             crop_prof = get_crop_profile(msg)
             crop_name = crop_prof["canonical_name"]
 
-            # If the user typed something completely vague that wasn't a recognized crop or topic
             if not self._is_plausible_crop_or_confirmation(msg, crop_name):
                 return {
                     "step": "CROP_SELECTION",
@@ -326,58 +331,6 @@ class FarmingChatPlanner:
                 "references": crop_prof.get("references", DEFAULT_REFERENCES),
                 "warnings": warnings
             }
-
-        elif current_step == "CONFIRMATION_PENDING":
-            crop_prof = get_crop_profile(selected_crop or "rice")
-            if self._is_affirmative(msg):
-                if is_estop_active:
-                    return {
-                        "step": "CONFIRMATION_PENDING",
-                        "selected_crop": crop_prof["canonical_name"],
-                        "reply": "Cannot proceed: Emergency stop is actively engaged. Deactivate E-Stop to enable automated operations.",
-                        "prompt_question": PROCEED_QUESTION,
-                        "readiness_score": 20,
-                        "readiness_status": "BLOCKED",
-                        "tasks": self._build_categorized_tasks(crop_prof, is_estop_active),
-                        "requires_confirmation": True,
-                        "references": crop_prof.get("references", DEFAULT_REFERENCES),
-                        "warnings": ["Safety Interlock Active: Clear physical E-Stop button before proceeding."]
-                    }
-                tasks = self._build_categorized_tasks(crop_prof, False)
-                # Mark system automated task as in-progress
-                for t in tasks:
-                    if t["category"] == "SYSTEM_AUTOMATED":
-                        t["status"] = "IN_PROGRESS"
-
-                reply = (
-                    "Planting preparation confirmed! Automated pre-soak irrigation workflow has been safely "
-                    "submitted to ArvaCore. Review your task checklist below as preparation progresses."
-                )
-                return {
-                    "step": "PREPARATION_ACTIVE",
-                    "selected_crop": crop_prof["canonical_name"],
-                    "reply": reply,
-                    "prompt_question": "Preparation in progress. Complete farmer manual tasks.",
-                    "readiness_score": 60,
-                    "readiness_status": "PREPARING",
-                    "tasks": tasks,
-                    "requires_confirmation": False,
-                    "references": crop_prof.get("references", DEFAULT_REFERENCES),
-                    "warnings": []
-                }
-            else:
-                return {
-                    "step": "CONFIRMATION_PENDING",
-                    "selected_crop": crop_prof["canonical_name"],
-                    "reply": "Understood. The proposed planting preparation has been placed on hold.",
-                    "prompt_question": PROCEED_QUESTION,
-                    "readiness_score": 45,
-                    "readiness_status": "ASSESSING",
-                    "tasks": self._build_categorized_tasks(crop_prof, is_estop_active),
-                    "requires_confirmation": True,
-                    "references": crop_prof.get("references", DEFAULT_REFERENCES),
-                    "warnings": []
-                }
 
         elif current_step in ["PREPARATION_ACTIVE", "CROP_MANAGEMENT"]:
             crop_prof = get_crop_profile(selected_crop or "rice")
@@ -457,7 +410,6 @@ class FarmingChatPlanner:
     ) -> Dict[str, Any]:
         """
         Builds a context-aware agricultural response using PhilRice, PAGASA, and Lopez data.
-        Does not force conversation reset or change current step unless necessary.
         """
         citations = []
         reply_lines = []
@@ -569,7 +521,6 @@ class FarmingChatPlanner:
         crop_prof = get_crop_profile(crop_name)
         tasks = self._build_categorized_tasks(crop_prof, is_estop_active)
 
-        # In PREPARATION_ACTIVE, questions about crop management advance the step to CROP_MANAGEMENT
         step_to_return = current_step
         if current_step == "PREPARATION_ACTIVE" and topic in ["fertilizer", "pest", "water", "harvest", "variety"]:
             step_to_return = "CROP_MANAGEMENT"
@@ -630,7 +581,7 @@ class FarmingChatPlanner:
             })
             tid += 1
 
-        # 4. Safety Blocked Tasks (conditional)
+        # 4. Safety Blocked Tasks
         if is_estop_active:
             tasks.append({
                 "id": tid,
