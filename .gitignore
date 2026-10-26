@@ -45,6 +45,9 @@ venv.bak/
 htmlcov/
 .tox/
 .nox/
+*.db
+*.db-wal
+*.db-shm
 
 # IDEs and editors
 .vscode/

@@ -24,6 +24,13 @@ from app.services.soil_fallback_engine import (
     SoilFallbackEvaluation,
     FallbackDecisionType
 )
+from app.services.workflow_dependency_engine import (
+    global_workflow_dependency_engine,
+    DependencyViolationError,
+    CircularDependencyError,
+    StepConcurrencyError
+)
+from app.models.workflow_models import StepStatus, TaskStatus
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -106,6 +113,37 @@ class SoilFallbackPayload(BaseModel):
     nodes_telemetry: list = []
     weather_forecast: Optional[dict] = None
     historical_last_valid_moisture: Optional[float] = None
+
+class WorkflowInitPayload(BaseModel):
+    task_id: str
+    title: str
+    user_id: str = "anonymous"
+    field_id: int = 1
+    session_id: Optional[str] = None
+    context_data: dict = {}
+
+class StepActionPayload(BaseModel):
+    task_id: str
+    step_code: str
+    output_data: Optional[dict] = None
+    execution_evidence: Optional[dict] = None
+    error_message: Optional[str] = None
+    skip_reason: Optional[str] = None
+    approved_by_policy: bool = False
+
+class DecisionPayload(BaseModel):
+    task_id: str
+    step_code: str = "S04"
+    decision_data: dict = {}
+
+class RemediationPayload(BaseModel):
+    task_id: str
+    failure_diagnosis: dict = {}
+
+class InvalidationPayload(BaseModel):
+    task_id: str
+    from_step_code: str
+    invalidation_reason: str
 
 @app.get("/health")
 def health():
@@ -255,6 +293,101 @@ def api_soil_fallback(payload: SoilFallbackPayload):
         return res.model_dump()
     except Exception as e:
         raise HTTPException(status_code=500, detail={"error": "SOIL_FALLBACK_FAILED", "message": str(e)})
+
+@app.post("/api/v1/ai/workflow/init")
+def api_init_workflow(payload: WorkflowInitPayload):
+    try:
+        task, steps = global_workflow_dependency_engine.initialize_workflow(
+            task_id=payload.task_id,
+            title=payload.title,
+            user_id=payload.user_id,
+            field_id=payload.field_id,
+            session_id=payload.session_id,
+            context_data=payload.context_data
+        )
+        return {
+            "task": task.model_dump(),
+            "steps": [s.model_dump() for s in steps]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail={"error": "WORKFLOW_INIT_FAILED", "message": str(e)})
+
+@app.get("/api/v1/ai/workflow/{task_id}")
+def api_get_workflow(task_id: str):
+    task = global_workflow_dependency_engine.db.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    steps = global_workflow_dependency_engine.db.get_task_steps(task_id)
+    events = global_workflow_dependency_engine.db.get_events_for_task(task_id)
+    return {
+        "task": task.model_dump(),
+        "steps": [s.model_dump() for s in steps],
+        "events": [e.model_dump() for e in events]
+    }
+
+@app.post("/api/v1/ai/workflow/step/start")
+def api_start_step(payload: StepActionPayload):
+    try:
+        step = global_workflow_dependency_engine.start_step(payload.task_id, payload.step_code)
+        return step.model_dump()
+    except DependencyViolationError as dve:
+        raise HTTPException(status_code=409, detail={"error": "DEPENDENCY_VIOLATION", "message": str(dve)})
+    except StepConcurrencyError as sce:
+        raise HTTPException(status_code=423, detail={"error": "CONCURRENCY_LOCKED", "message": str(sce)})
+    except Exception as e:
+        raise HTTPException(status_code=400, detail={"error": "STEP_START_FAILED", "message": str(e)})
+
+@app.post("/api/v1/ai/workflow/step/complete")
+def api_complete_step(payload: StepActionPayload):
+    try:
+        step = global_workflow_dependency_engine.complete_step(
+            payload.task_id, payload.step_code, payload.output_data, payload.execution_evidence
+        )
+        return step.model_dump()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail={"error": "STEP_COMPLETE_FAILED", "message": str(e)})
+
+@app.post("/api/v1/ai/workflow/step/skip")
+def api_skip_step(payload: StepActionPayload):
+    try:
+        step = global_workflow_dependency_engine.skip_step(
+            payload.task_id, payload.step_code, payload.skip_reason or "", payload.approved_by_policy
+        )
+        return step.model_dump()
+    except DependencyViolationError as dve:
+        raise HTTPException(status_code=400, detail={"error": "SKIP_REJECTED", "message": str(dve)})
+    except Exception as e:
+        raise HTTPException(status_code=400, detail={"error": "STEP_SKIP_FAILED", "message": str(e)})
+
+@app.post("/api/v1/ai/workflow/decision")
+def api_record_decision(payload: DecisionPayload):
+    try:
+        step = global_workflow_dependency_engine.record_decision(
+            payload.task_id, payload.decision_data, payload.step_code
+        )
+        return step.model_dump()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail={"error": "DECISION_RECORD_FAILED", "message": str(e)})
+
+@app.post("/api/v1/ai/workflow/remediation")
+def api_trigger_remediation(payload: RemediationPayload):
+    try:
+        step = global_workflow_dependency_engine.trigger_remediation(
+            payload.task_id, payload.failure_diagnosis
+        )
+        return step.model_dump()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail={"error": "REMEDIATION_FAILED", "message": str(e)})
+
+@app.post("/api/v1/ai/workflow/invalidate")
+def api_invalidate_downstream(payload: InvalidationPayload):
+    try:
+        invalidated = global_workflow_dependency_engine.invalidate_downstream(
+            payload.task_id, payload.from_step_code, payload.invalidation_reason
+        )
+        return {"invalidated_steps": invalidated}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail={"error": "INVALIDATION_FAILED", "message": str(e)})
 
 def handle_query(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Pure Python handler compatible with standard ASGI/WSGI or FastAPI."""
