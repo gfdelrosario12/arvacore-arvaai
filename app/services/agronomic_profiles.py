@@ -4,7 +4,7 @@ Traceable references: IRRI AWD Technical Guidelines, DA-PhilRice Varietal Guides
 """
 
 from typing import Dict, Any, List
-from arvaAI.app.services.philrice_rice_knowledge import (
+from app.services.philrice_rice_knowledge import (
     RICE_VARIETIES,
     CROP_ESTABLISHMENT_METHODS,
     RICE_GROWTH_STAGES_AND_WATER,

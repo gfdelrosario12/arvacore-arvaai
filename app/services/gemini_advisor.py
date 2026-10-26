@@ -11,9 +11,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import Dict, Any, List
 
-from arvaAI.app.schemas.decision_models import UserQueryRequest, AIAdvisorResponse
-from arvaAI.app.tools.read_only_tools import ReadOnlyTelemetryTools
-from arvaAI.app.services.philrice_rice_knowledge import (
+from app.schemas.decision_models import UserQueryRequest, AIAdvisorResponse
+from app.tools.read_only_tools import ReadOnlyTelemetryTools
+from app.services.philrice_rice_knowledge import (
     RICE_VARIETIES,
     CROP_ESTABLISHMENT_METHODS,
     RICE_GROWTH_STAGES_AND_WATER,

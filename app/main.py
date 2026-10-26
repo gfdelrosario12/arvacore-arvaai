@@ -8,10 +8,10 @@ import os
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 
-from arvaAI.app.schemas.decision_models import UserQueryRequest
-from arvaAI.app.tools.read_only_tools import ReadOnlyTelemetryTools
-from arvaAI.app.services.gemini_advisor import ArvaGeminiAdvisor
-from arvaAI.app.services.multi_source_evidence_aggregator import MultiSourceAgronomicEvidenceAggregator
+from app.schemas.decision_models import UserQueryRequest
+from app.tools.read_only_tools import ReadOnlyTelemetryTools
+from app.services.gemini_advisor import ArvaGeminiAdvisor
+from app.services.multi_source_evidence_aggregator import MultiSourceAgronomicEvidenceAggregator
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel

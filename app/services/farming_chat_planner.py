@@ -10,9 +10,9 @@ import uuid
 import re
 from datetime import datetime, timezone
 
-from arvaAI.app.services.agronomic_profiles import get_crop_profile
-from arvaAI.app.services.philrice_manual_retriever import PhilRiceManualRetriever
-from arvaAI.app.tools.read_only_tools import ReadOnlyTelemetryTools
+from app.services.agronomic_profiles import get_crop_profile
+from app.services.philrice_manual_retriever import PhilRiceManualRetriever
+from app.tools.read_only_tools import ReadOnlyTelemetryTools
 
 INITIAL_QUESTION = "Hi, I am Arva, what do you like to plant today?"
 PROCEED_QUESTION = "Do you want to proceed with the proposed planting preparation?"

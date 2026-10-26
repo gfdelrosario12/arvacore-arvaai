@@ -1,6 +1,6 @@
 import unittest
-from arvaAI.app.services.farming_chat_planner import FarmingChatPlanner
-from arvaAI.app.services.philrice_rice_knowledge import (
+from app.services.farming_chat_planner import FarmingChatPlanner
+from app.services.philrice_rice_knowledge import (
     RICE_VARIETIES,
     CROP_ESTABLISHMENT_METHODS,
     RICE_GROWTH_STAGES_AND_WATER,

@@ -1,7 +1,7 @@
 import unittest
-from arvaAI.app.schemas.decision_models import UserQueryRequest
-from arvaAI.app.tools.read_only_tools import ReadOnlyTelemetryTools
-from arvaAI.app.services.gemini_advisor import ArvaGeminiAdvisor
+from app.schemas.decision_models import UserQueryRequest
+from app.tools.read_only_tools import ReadOnlyTelemetryTools
+from app.services.gemini_advisor import ArvaGeminiAdvisor
 
 class TestArvaAISafetyAndAdvisor(unittest.TestCase):
     def setUp(self):

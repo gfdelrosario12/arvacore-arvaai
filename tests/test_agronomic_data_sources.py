@@ -2,15 +2,11 @@ import unittest
 import sys
 import os
 
-sys.path.insert(0, '/home/gladwin/Documents/pagaaral/arvacore')
-import ArvaAI
-sys.modules['arvaAI'] = ArvaAI
-
-from ArvaAI.app.tools.mcp_pagasa_adapter import PagasaWeatherMcpAdapter
-from ArvaAI.app.tools.mcp_lopez_agri_adapter import LopezAgriHistoricalMcpAdapter
-from ArvaAI.app.services.philrice_manual_retriever import PhilRiceManualRetriever
-from ArvaAI.app.services.multi_source_evidence_aggregator import MultiSourceAgronomicEvidenceAggregator
-from ArvaAI.app.tools.read_only_tools import ReadOnlyTelemetryTools
+from app.tools.mcp_pagasa_adapter import PagasaWeatherMcpAdapter
+from app.tools.mcp_lopez_agri_adapter import LopezAgriHistoricalMcpAdapter
+from app.services.philrice_manual_retriever import PhilRiceManualRetriever
+from app.services.multi_source_evidence_aggregator import MultiSourceAgronomicEvidenceAggregator
+from app.tools.read_only_tools import ReadOnlyTelemetryTools
 
 class TestAgronomicDataSources(unittest.TestCase):
 

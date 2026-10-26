@@ -15,8 +15,11 @@ import re
 import json
 from typing import List, Dict, Any, Optional
 
-MANUAL_PDF_PATH = "/home/gladwin/Documents/pagaaral/arvacore/Documentations/philippine-rice-production-training-manual.pdf"
-CACHE_INDEX_PATH = "/home/gladwin/Documents/pagaaral/arvacore/ArvaAI/app/services/philrice_manual_index.json"
+_CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+CACHE_INDEX_PATH = os.path.join(_CURRENT_DIR, "philrice_manual_index.json")
+MANUAL_PDF_PATH = os.path.abspath(
+    os.path.join(_CURRENT_DIR, "../../../Documentations/philippine-rice-production-training-manual.pdf")
+)
 
 class PhilRiceManualRetriever:
     def __init__(self, pdf_path: str = MANUAL_PDF_PATH, cache_path: str = CACHE_INDEX_PATH):

@@ -1,5 +1,5 @@
 import unittest
-from arvaAI.app.services.farming_chat_planner import FarmingChatPlanner, INITIAL_QUESTION, PROCEED_QUESTION
+from app.services.farming_chat_planner import FarmingChatPlanner, INITIAL_QUESTION, PROCEED_QUESTION
 
 class FarmingChatPlannerTest(unittest.TestCase):
 

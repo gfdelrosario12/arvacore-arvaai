@@ -19,9 +19,9 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timezone
 
-from arvaAI.app.tools.mcp_pagasa_adapter import PagasaWeatherMcpAdapter
-from arvaAI.app.tools.mcp_lopez_agri_adapter import LopezAgriHistoricalMcpAdapter
-from arvaAI.app.services.philrice_manual_retriever import PhilRiceManualRetriever
+from app.tools.mcp_pagasa_adapter import PagasaWeatherMcpAdapter
+from app.tools.mcp_lopez_agri_adapter import LopezAgriHistoricalMcpAdapter
+from app.services.philrice_manual_retriever import PhilRiceManualRetriever
 
 class ReadOnlyTelemetryTools:
     def __init__(self, backend_base_url: str, backend_token: str):

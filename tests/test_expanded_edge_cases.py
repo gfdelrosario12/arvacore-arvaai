@@ -2,9 +2,9 @@ import unittest
 from unittest.mock import patch, MagicMock
 from datetime import datetime, timezone, timedelta
 
-from arvaAI.app.schemas.decision_models import UserQueryRequest
-from arvaAI.app.tools.read_only_tools import ReadOnlyTelemetryTools
-from arvaAI.app.services.gemini_advisor import ArvaGeminiAdvisor
+from app.schemas.decision_models import UserQueryRequest
+from app.tools.read_only_tools import ReadOnlyTelemetryTools
+from app.services.gemini_advisor import ArvaGeminiAdvisor
 
 class TestExpandedEdgeCasesAndUncertainty(unittest.TestCase):
     def setUp(self):

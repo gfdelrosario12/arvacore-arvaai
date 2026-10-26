@@ -16,7 +16,6 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
-RUN ln -s /app /app/arvaAI
 
 # Run as non-root user
 RUN addgroup --system arva && adduser --system --group arva

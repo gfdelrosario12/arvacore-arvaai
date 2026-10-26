@@ -26,9 +26,9 @@ import json
 import urllib.request
 import urllib.error
 
-from arvaAI.app.tools.mcp_pagasa_adapter import PagasaWeatherMcpAdapter
-from arvaAI.app.tools.mcp_lopez_agri_adapter import LopezAgriHistoricalMcpAdapter
-from arvaAI.app.services.philrice_manual_retriever import PhilRiceManualRetriever
+from app.tools.mcp_pagasa_adapter import PagasaWeatherMcpAdapter
+from app.tools.mcp_lopez_agri_adapter import LopezAgriHistoricalMcpAdapter
+from app.services.philrice_manual_retriever import PhilRiceManualRetriever
 
 class MultiSourceAgronomicEvidenceAggregator:
     def __init__(

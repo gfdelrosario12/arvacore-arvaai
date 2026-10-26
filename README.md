@@ -45,5 +45,5 @@ Attempts to execute unlisted tools (e.g. `activate_pump_relay`, `override_safety
 
 Run the test suite verifying prompt injection defenses, input sanitization, and safety invariants:
 ```bash
-PYTHONPATH=. python3 -m unittest arvaAI/tests/test_ai_safety_and_advisor.py
+PYTHONPATH=. python3 -m unittest discover -s tests
 ```
