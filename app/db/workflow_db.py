@@ -87,8 +87,24 @@ CREATE INDEX IF NOT EXISTS idx_task_event_task ON ai_task_event(task_id);
 
 
 class WorkflowDatabase:
-    def __init__(self, db_path: str = "arva_workflow.db"):
-        self.db_path = db_path
+    def __init__(self, db_path: Optional[str] = None):
+        if db_path is None:
+            # Check environment or default to writable path
+            env_path = os.getenv("ARVA_WORKFLOW_DB_PATH")
+            if env_path:
+                self.db_path = env_path
+            elif os.path.exists("/app/data"):
+                self.db_path = "/app/data/arva_workflow.db"
+            else:
+                self.db_path = "arva_workflow.db"
+        else:
+            self.db_path = db_path
+        
+        # Ensure parent directory exists if path contains directories
+        parent_dir = os.path.dirname(self.db_path)
+        if parent_dir and not os.path.exists(parent_dir):
+            os.makedirs(parent_dir, exist_ok=True)
+            
         self._init_db()
 
     def get_connection(self) -> sqlite3.Connection:

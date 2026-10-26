@@ -17,8 +17,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Run as non-root user
-RUN addgroup --system arva && adduser --system --group arva
+# Run as non-root user and ensure data directory is writable
+RUN addgroup --system arva && adduser --system --group arva \
+    && mkdir -p /app/data && chown -R arva:arva /app/data /app
 USER arva
 
 EXPOSE 8000
