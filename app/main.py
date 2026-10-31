@@ -140,6 +140,21 @@ class RemediationPayload(BaseModel):
     task_id: str
     failure_diagnosis: dict = {}
 
+class ImplementationPlanPayload(BaseModel):
+    plan_id: int
+    plan_code: str
+    title: str
+    crop_name: str
+    lifecycle_status: str = "NOT_STARTED" # NOT_STARTED, IN_PROGRESS, CONTINUED, COMPLETED, CANCELLED, FAILED
+    progress_percent: int = 0
+    readiness_score: int = 0
+    readiness_status: str = "ASSESSING"
+    status_reason: Optional[str] = None
+    completion_evidence: Optional[str] = None
+    associated_session_ids: list = []
+    pending_tasks_count: int = 0
+    completed_tasks_count: int = 0
+
 class InvalidationPayload(BaseModel):
     task_id: str
     from_step_code: str
@@ -388,6 +403,40 @@ def api_invalidate_downstream(payload: InvalidationPayload):
         return {"invalidated_steps": invalidated}
     except Exception as e:
         raise HTTPException(status_code=400, detail={"error": "INVALIDATION_FAILED", "message": str(e)})
+
+@app.post("/api/v1/ai/plans/register")
+def api_register_plan(payload: ImplementationPlanPayload):
+    try:
+        from app.models.workflow_models import ImplementationPlanSummary, PlanLifecycleStatus
+        plan = ImplementationPlanSummary(
+            plan_id=payload.plan_id,
+            plan_code=payload.plan_code,
+            title=payload.title,
+            crop_name=payload.crop_name,
+            lifecycle_status=PlanLifecycleStatus(payload.lifecycle_status),
+            progress_percent=payload.progress_percent,
+            readiness_score=payload.readiness_score,
+            readiness_status=payload.readiness_status,
+            status_reason=payload.status_reason,
+            completion_evidence=payload.completion_evidence,
+            associated_session_ids=payload.associated_session_ids,
+            pending_tasks_count=payload.pending_tasks_count,
+            completed_tasks_count=payload.completed_tasks_count
+        )
+        global_memory_store.register_plan(plan)
+        return {"status": "SUCCESS", "plan_id": plan.plan_id, "lifecycle_status": plan.lifecycle_status.value}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail={"error": "PLAN_REGISTRATION_FAILED", "message": str(e)})
+
+@app.get("/api/v1/ai/plans/active")
+def api_get_active_plans(user_id: str = "farmer", field_id: int = 1):
+    plans = global_memory_store.find_active_or_continued_plans(user_id, field_id)
+    return {"active_plans": [p.model_dump() for p in plans]}
+
+@app.get("/api/v1/ai/conversations/history")
+def api_get_conversations_history(user_id: str = "farmer", limit: int = 5):
+    convs = global_memory_store.find_historical_conversations_with_plans(user_id, limit)
+    return {"conversations": convs}
 
 def handle_query(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Pure Python handler compatible with standard ASGI/WSGI or FastAPI."""

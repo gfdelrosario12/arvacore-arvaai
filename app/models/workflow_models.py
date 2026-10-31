@@ -2,12 +2,22 @@
 Data models and Schema Definitions for Arva AI Workflow Steps and Dependencies.
 Enforces foreign keys, unique dependency pairs, valid task ownership,
 and dependency relationships (REQUIRED vs CONDITIONAL).
+Includes PlanLifecycleStatus for formal implementation plan lifecycle tracking.
 """
 
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
+
+
+class PlanLifecycleStatus(str, Enum):
+    NOT_STARTED = "NOT_STARTED"
+    IN_PROGRESS = "IN_PROGRESS"
+    CONTINUED = "CONTINUED"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
+    FAILED = "FAILED"
 
 
 class StepStatus(str, Enum):
@@ -34,6 +44,7 @@ class TaskStatus(str, Enum):
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     BLOCKED = "BLOCKED"
+    CANCELLED = "CANCELLED"
     PARTIAL = "PARTIAL"
 
 
@@ -45,6 +56,7 @@ class EventType(str, Enum):
     DECISION_RECORDED = "DECISION_RECORDED"
     REMEDIATION_TRIGGERED = "REMEDIATION_TRIGGERED"
     TASK_STATUS_CHANGED = "TASK_STATUS_CHANGED"
+    PLAN_LIFECYCLE_CHANGED = "PLAN_LIFECYCLE_CHANGED"
 
 
 class WorkflowStepDependency(BaseModel):
@@ -89,6 +101,24 @@ class AITask(BaseModel):
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
+class ImplementationPlanSummary(BaseModel):
+    plan_id: int
+    plan_code: str
+    title: str
+    crop_name: str
+    lifecycle_status: PlanLifecycleStatus = PlanLifecycleStatus.NOT_STARTED
+    progress_percent: int = 0
+    readiness_score: int = 0
+    readiness_status: str = "ASSESSING"
+    status_reason: Optional[str] = None
+    completion_evidence: Optional[str] = None
+    associated_session_ids: List[str] = Field(default_factory=list)
+    pending_tasks_count: int = 0
+    completed_tasks_count: int = 0
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
 class AITaskEvent(BaseModel):
     id: str
     task_id: str
@@ -96,4 +126,3 @@ class AITaskEvent(BaseModel):
     event_type: EventType
     event_payload: Dict[str, Any] = Field(default_factory=dict)
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-
